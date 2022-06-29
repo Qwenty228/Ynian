@@ -1,0 +1,5 @@
+discord.py==2.0.0a4157+g3e8fa5a6
+eyed3==0.9.6
+pytube==12.0.0
+youtube_search==2.1.0
+yt_dlp==2022.2.4
