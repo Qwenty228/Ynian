@@ -1,7 +1,9 @@
+from http.client import HTTPException
 from discord import ButtonStyle, app_commands
 from discord.ext import commands
 import asyncio, typing, discord, re, math
 from datetime import datetime
+from corgidb.objects import Condition
 
 
 from main import Yukinian
@@ -14,18 +16,50 @@ class Music(commands.Cog):
         bot.tree.on_error = self.on_app_command_error
         self.coroutines = []
         self._queue_collector = {}
-        self._now_collector = {}
+        self.favorite_songs = self.bot.cdb.utils.get_table("Favorite_songs")
+        self.ctx_menu = app_commands.ContextMenu(name='Add to favorite',
+                                                callback=self.favorite)
+        self.bot.tree.add_command(self.ctx_menu)
 
-    # @commands.command()
-    # async def bar(self, ctx, per):
-    #     async def send(i):
-    #         file = create_progress_bar_2(int(i))
-    #         msg = await ctx.send(file=file)
-    #         b = f"{i}:'{msg.attachments[0].url}',\n"
-    #         return b
+    async def cog_unload(self) -> None:
+        self.bot.tree.remove_command(self.ctx_menu.name, type=self.ctx_menu.type)
 
-    #     a = await asyncio.gather(*[send(i) for i in range(int(per))])
-    #     print(''.join(a))
+    async def favorite(self, ctx: discord.Interaction, message: discord.Message) -> None:
+        if message.author != self.bot.user:
+            return await ctx.response.send_message("cannot use this command on others", ephemeral=True)
+        await ctx.response.defer()
+        interaction = message.interaction
+   
+        try:
+            c = Condition(conditions=[f'user_id = {ctx.user.id}'], logic='or')
+            every_songs = self.favorite_songs.get(condition=c)['song_url']
+            compiler = re.compile('\[.+\]\((.+)\)')
+            if interaction:
+                if interaction.name == 'queue':
+                    embed = message.embeds[0].to_dict()['description']
+                    urls = list(set(re.findall(compiler, embed)))
+                    await ctx.followup.send(f"add every songs from queue to favorite")
+                    for song in urls:
+                        if song not in every_songs:
+                            self.favorite_songs.insert(data={"user_id" : str(ctx.user.id),
+                                                            "song_url": str(song)})
+
+
+                    return await message.add_reaction('👍')
+
+
+            embed = message.embeds[0].to_dict()
+            url = embed['fields'][-1]['value']
+            url = re.findall(compiler, url)[0]
+            await ctx.followup.send(f"add [song]({url}) to favorite")
+            if song not in every_songs:
+                self.favorite_songs.insert(data={"user_id" : str(ctx.user.id),
+                                                        "song_url": str(url)})
+
+            return await message.add_reaction('👍')
+        except Exception as e:
+            print(e)
+            return await ctx.followup.send("This command can only use on /play, /queue and /now")
 
 
     @app_commands.command(name='join')
@@ -35,6 +69,7 @@ class Music(commands.Cog):
 
     @app_commands.command(name="leave",description="leave vc")
     async def leave(self, ctx:discord.Interaction):
+        await ctx.response.defer()
         vc = self.bot.voice_state.validate
         await vc.voice.disconnect()
         return await ctx.followup.send("left")
@@ -49,11 +84,11 @@ class Music(commands.Cog):
                 return
         
         msg = await self.bot.voice_state.connect(voice_channel)
-        await ctx.followup.send(msg, ephemeral=True)
+        msg = await ctx.followup.send(msg)
 
         embed, task, text = await self.bot.voice_state.play(song)
         
-        msg = await ctx.followup.send(embed=embed, ephemeral=False)
+        msg = await msg.edit(content='', embed=embed)
 
         if task:    self.coroutines.append(task)
         # when finished adding playlist
@@ -169,12 +204,16 @@ class Music(commands.Cog):
     async def queue(self, ctx: discord.Interaction, page:int = 1):
         #print([emoji for emoji in self.bot.emojis])
         await ctx.response.defer()
-        if (old := self._queue_collector.get(ctx.user.id)):
-            m, v = old
-            await v.on_timeout()
-            await m.edit(view=v)
+        try:
+            if (old := self._queue_collector.get(ctx.user.id)):
+                m, v = old
+                await v.on_timeout()
+                await m.edit(view=v)
+        except HTTPException:
+            pass
 
-        vc = self.bot.voice_state.validate
+
+        vc = self.bot.voice_state
         yt_emoji = self.bot.get_emoji(985490013024288779)
         song_list = [discord.SelectOption(label=(song.source.title if isinstance(song, Song) else 'pending'), value=i, emoji=yt_emoji, 
                                         description=(song.source.uploader if isinstance(song, Song) else 'pending')) for i, song in enumerate(vc.song_queue)]
@@ -228,8 +267,6 @@ class Music(commands.Cog):
                 self.coroutines = tasks
             await asyncio.sleep(1)
 
-        
-
     @app_commands.command(name="skip", description="Skip / Skip to")
     @app_commands.describe(destination='skip to song or 0 to skip first song')
     async def skip(self, ctx: discord.Interaction, destination: str = '0'):
@@ -256,115 +293,10 @@ class Music(commands.Cog):
     @app_commands.command()
     async def now(self, ctx: discord.Interaction):
         await ctx.response.defer()
-        class View(discord.ui.View):
-            def __init__(self, *, timeout: float = 180.0):
-                super().__init__(timeout=timeout)
-                # create a CooldownMapping with a rate of 1 token per 3 seconds using our key function
-                self.cd = commands.CooldownMapping.from_cooldown(1.0, 3.0, lambda interaction: interaction.user)
-
-            async def on_timeout(self):
-                for child in self.children:  
-                    child.disabled = True
-                await msg.edit(view=self)
-                return self.stop()  
-
-            async def interaction_check(self, interaction: discord.Interaction):
-                retry_after = self.cd.update_rate_limit(interaction)
-                if retry_after:
-                # rate limited
-                # we could raise `commands.CommandOnCooldown` instead, but we only need the `retry_after` value
-                    raise exceptions.ButtonOnCooldown(retry_after)
-                # not rate limited
-                return True
-
-            async def on_error(self, interaction: discord.Interaction, error: Exception, item: discord.ui.Item):
-                if not interaction.response.is_done(): await interaction.response.defer()
-                if isinstance(error, exceptions.ButtonOnCooldown):
-                    seconds = int(error.retry_after)
-                    unit = 'second' if seconds == 1 else 'seconds'
-                    await interaction.followup.send(f"You're on cooldown for {seconds} {unit}!", ephemeral=True)
-                else:
-                # call the original on_error, which prints the traceback to stderr
-                    await super().on_error(interaction, error, item)
-
-            @discord.ui.button(label="prev", emoji="⏮", style=ButtonStyle.blurple)
-            async def prev(self,  interaction: discord.Interaction, button: discord.ui.Button):
-                await interaction.response.defer()
-                vc.alter_audio(position=0)
-
-                await asyncio.sleep(0.5)
-
-                embed = await vc.show_current()
-                await msg.edit(embed=embed, view=view)
-
-            @discord.ui.button(label="rewind", emoji="⏪", style=ButtonStyle.gray)
-            async def rw(self,  interaction: discord.Interaction, button: discord.ui.Button):
-                await interaction.response.defer()
-                new_pos = vc.source.position - 10
-                vc.alter_audio(position=max(0, new_pos))
-
-                await asyncio.sleep(0.5)
-
-                embed = await vc.show_current()
-                await msg.edit(embed=embed, view=view)
-
-            @discord.ui.button(label="pause", emoji="⏯", style=ButtonStyle.red)
-            async def pause(self,  interaction: discord.Interaction, button: discord.ui.Button):
-                await interaction.response.defer()
-                
-                if vc.voice.is_paused():
-                    vc.voice.resume()
-                    button.label = 'pause'
-                elif not vc.voice.is_paused():
-                    vc.voice.pause()
-                    button.label = 'resume'
-                    
-                await asyncio.sleep(0.5)
-
-                embed = await vc.show_current()
-                await msg.edit(embed=embed, view=view)
-                
-                    
-
-            @discord.ui.button(label="forward", emoji="⏩", style=ButtonStyle.gray)
-            async def ff(self,  interaction: discord.Interaction, button: discord.ui.Button):
-                await interaction.response.defer()
-                new_pos = vc.source.position + 10
-                if new_pos < vc.current.source.raw_duration:
-                    vc.alter_audio(position=new_pos)
-                else:
-                    vc.voice.stop()
-
-                await asyncio.sleep(0.5)
-
-                embed = await vc.show_current()
-                await msg.edit(embed=embed, view=view)
-            
-            @discord.ui.button(label="skip", emoji="⏭", style=ButtonStyle.blurple)
-            async def skip(self,  interaction: discord.Interaction, button: discord.ui.Button):
-                await interaction.response.defer()
-                vc.voice.stop()
-
-                await asyncio.sleep(1.5)
-                
-                embed = await vc.show_current()
-    
-                await msg.edit(embed=embed, view=view)
-
-        if (old := self._now_collector.get(ctx.user.id)):
-            m, v = old
-            await v.on_timeout()
-            await m.edit(view=v)
-
         vc = self.bot.voice_state.validate
         embed = await vc.show_current()
-        view = View()
-        msg = await ctx.followup.send(embed=embed, view=view)
-
-        self._now_collector[ctx.user.id] = [msg, view]
-
-        await view.wait()
-        
+   
+        await ctx.followup.send(embed=embed)
 
 
     @app_commands.command(name="remove", description="remove song")
@@ -390,23 +322,26 @@ class Music(commands.Cog):
     @remove.autocomplete('song')
     async def songs_name_autocomplete(self, ctx: discord.Interaction,current: str,) -> typing.List[app_commands.Choice[str]]:
         result = []
-        vc = self.bot.voice_state.validate
-        count = 0
-        SL = [vc.current] + list(vc.song_queue)     
-        if SL:
-            for i, song in enumerate(SL):
-                try:
-                    title = song.source.title.lower()
-                except AttributeError:
-                    title = 'pending...'
-                if current.lower() in title:
+        try:
+            vc = self.bot.voice_state.validate
+            count = 0
+            SL = [vc.current] + list(vc.song_queue)     
+            if SL:
+                for i, song in enumerate(SL):
                     try:
-                        result.append(app_commands.Choice(name=f'{i}. {song.source.title}', value=str(i)))
+                        title = song.source.title.lower()
                     except AttributeError:
-                        result.append(app_commands.Choice(name=f'{i}. pending...', value=str(i)))
-                    count += 1
-                if count == 25:
-                    break
+                        title = 'pending...'
+                    if current.lower() in title:
+                        try:
+                            result.append(app_commands.Choice(name=f'{i}. {song.source.title}', value=str(i)))
+                        except AttributeError:
+                            result.append(app_commands.Choice(name=f'{i}. pending...', value=str(i)))
+                        count += 1
+                    if count == 25:
+                        break
+        except Exception:
+            pass
         return result
     
     @app_commands.command(name='clear')

@@ -4,20 +4,21 @@ from random import choice
 import json
 from discord.app_commands import CommandTree
 from dotenv import load_dotenv
+from corgidb import CorgiDB as cd
 
 from cogs.Libs.audio_manager import Voice_State
 
+
+
 with open('database/author.json') as f:
     author = json.load(f)
-
-
 dotenv_path = os.path.join("database", 'config.env')
 load_dotenv(dotenv_path)
 
 
 initial_extensions = (
     'cogs.music',
-    'cogs.mod'
+    'cogs.mod',
 )
 
 
@@ -61,14 +62,21 @@ class Yukinian(commands.Bot):
             chunk_guilds_at_startup=False,
             heartbeat_timeout=150.0,
             intents=discord.Intents.all(),
-            enable_debug_events=True,
-            application_id= os.environ.get('APPLICATION_ID'),
+            enable_debug_events=True,         
             activity=choice(activities),
-            tree_cls=MyTree
+            tree_cls=MyTree,
+            application_id= os.environ.get('APPLICATION_ID'),
         )
         self.voice_state: Voice_State = None
         self.CLIENT_ID = os.environ.get('CLIENT_ID')
         self.author = author
+        self.cdb = cd(database_path='database/db.sqlite')
+        try:
+            self.cdb.utils.create_table(name="Favorite_songs",
+                                        columns=[("user_id"     , str),
+                                                ("song_url"      , str)])
+        except Exception:
+            pass
       
     async def setup_hook(self):
         for extension in initial_extensions:
