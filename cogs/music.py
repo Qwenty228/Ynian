@@ -43,16 +43,13 @@ class Music(commands.Cog):
                         if song not in every_songs:
                             self.favorite_songs.insert(data={"user_id" : str(ctx.user.id),
                                                             "song_url": str(song)})
-
-
                     return await message.add_reaction('👍')
-
 
             embed = message.embeds[0].to_dict()
             url = embed['fields'][-1]['value']
             url = re.findall(compiler, url)[0]
             await ctx.followup.send(f"add [song]({url}) to favorite")
-            if song not in every_songs:
+            if url not in every_songs:
                 self.favorite_songs.insert(data={"user_id" : str(ctx.user.id),
                                                         "song_url": str(url)})
 
@@ -60,7 +57,6 @@ class Music(commands.Cog):
         except Exception as e:
             print(e)
             return await ctx.followup.send("This command can only use on /play, /queue and /now")
-
 
     @app_commands.command(name='join')
     async def join(self, ctx: discord.Interaction, voice_channel:typing.Optional[discord.VoiceChannel], ephemeral: bool=False):
@@ -78,6 +74,8 @@ class Music(commands.Cog):
     @app_commands.describe(song="song name or url", voice_channel= "VC")
     async def play(self, ctx: discord.Interaction, *, song:str, voice_channel:typing.Optional[discord.VoiceChannel] = None, mode: typing.Literal['default', 'select'] = 'default'):
         await ctx.response.defer()
+
+
         if mode == 'select':
             song = await self.song_search(ctx, song)
             if not song:
@@ -86,9 +84,18 @@ class Music(commands.Cog):
         msg = await self.bot.voice_state.connect(voice_channel)
         msg = await ctx.followup.send(msg)
 
-        embed, task, text = await self.bot.voice_state.play(song)
-        
-        msg = await msg.edit(content='', embed=embed)
+        if song.lower() == 'favorite':
+            c = Condition(conditions=[f'user_id = {ctx.user.id}'], logic='or')
+            every_songs = self.favorite_songs.get(condition=c)['song_url']
+            for song_url in every_songs:
+                embed, task, text = await self.bot.voice_state.play(song_url)
+            embed.title = f'{len(every_songs)} Songs from favorite'
+            msg = await msg.edit(content='', embed=embed)
+
+        else:
+            embed, task, text = await self.bot.voice_state.play(song)
+            
+            msg = await msg.edit(content='', embed=embed)
 
         if task:    self.coroutines.append(task)
         # when finished adding playlist
@@ -318,7 +325,41 @@ class Music(commands.Cog):
         else:
             return await ctx.response.send_message("Queue is already Empty")
 
+    @app_commands.command(name='favorite')
+    async def fav_2(self, ctx: discord.Interaction, song: str= None):
+        await ctx.response.defer()
+        
+        
+        c = Condition(conditions=[f'user_id = {ctx.user.id}'], logic='or')
+        every_songs = self.favorite_songs.get(condition=c)['song_url']
+
+        if song is None:
+            return await ctx.followup.send(','.join(every_songs))
+        vc = self.bot.voice_state.validate
+        
+        index = int(song)
+        if index == 0:
+            msg = await ctx.followup.send("add {0} to favorite".format(vc.current.hyperlink))
+            url = vc.current.source.url
+            if url not in every_songs:
+                self.favorite_songs.insert(data={"user_id" : str(ctx.user.id),
+                                                        "song_url": str(url)})
+            return await msg.add_reaction("✅")
+
+        if len(vc.song_queue) != 0:
+            index = min(max(index, -1), len(vc.song_queue))  
+            msg = await ctx.followup.send("add {0} to favorite".format(vc.song_queue[index-1]))
+            url = vc.song_queue[index-1].source.url
+            if url not in every_songs:
+                self.favorite_songs.insert(data={"user_id" : str(ctx.user.id),
+                                                        "song_url": str(url)})
+
+            return await msg.add_reaction("✅")
+        else:
+            return await ctx.response.send_message("Queue is already Empty")
+
     @skip.autocomplete('destination')
+    @fav_2.autocomplete('song')
     @remove.autocomplete('song')
     async def songs_name_autocomplete(self, ctx: discord.Interaction,current: str,) -> typing.List[app_commands.Choice[str]]:
         result = []
