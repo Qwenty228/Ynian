@@ -66,6 +66,8 @@ class Moderation(commands.Cog):
         
         embed.set_footer(text=f"I was created at {self.bot.user.created_at.strftime('%m/%d/%Y, %H:%M:%S')}")
         await ctx.send(embed=embed)
+        info = await self.bot.application_info()
+        print(info)
         #user = await self.bot.fetch_user(int(user_id))
 
     

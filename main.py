@@ -1,4 +1,4 @@
-import discord, traceback, sys, typing, os
+import discord, traceback, sys, glob, os
 from discord.ext import commands, tasks
 from random import choice
 import json
@@ -15,11 +15,9 @@ with open('database/author.json') as f:
 dotenv_path = os.path.join("database", 'config.env')
 load_dotenv(dotenv_path)
 
+extensions = [os.path.splitext(name)[0].replace('\\', '.') for name in glob.glob('cogs/*.py')]
+initial_extensions = extensions
 
-initial_extensions = (
-    'cogs.music',
-    'cogs.mod',
-)
 
 
 description = """

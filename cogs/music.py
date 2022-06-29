@@ -10,8 +10,9 @@ from main import Yukinian
 from .Libs.config import filters, exceptions, search_song
 from .Libs.objs import Song
 
-class Music(commands.Cog):
+class Music(commands.GroupCog, name='music'):
     def __init__(self, bot:Yukinian):
+        super().__init__()
         self.bot = bot
         bot.tree.on_error = self.on_app_command_error
         self.coroutines = []
