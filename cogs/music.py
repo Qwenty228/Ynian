@@ -14,7 +14,7 @@ class Music(commands.GroupCog, name='music'):
     def __init__(self, bot:Yukinian):
         super().__init__()
         self.bot = bot
-        bot.tree.on_error = self.on_app_command_error
+        # bot.tree.on_error = self.on_app_command_error
         self.coroutines = []
         self._queue_collector = {}
         self.favorite_songs = self.bot.cdb.utils.get_table("Favorite_songs")
@@ -531,6 +531,7 @@ class Music(commands.GroupCog, name='music'):
     async def on_app_command_error(self, interaction: discord.Interaction, error: discord.app_commands.AppCommandError):
         # error, sep, ephemeral = str(error).partition('ephemeral')
         # ephemeral = ephemeral or False
+        
         if interaction.response.is_done():
             return await interaction.followup.send(error)#, ephemeral=ephemeral)
         await interaction.response.send_message(error) #, ephemeral=ephemeral)

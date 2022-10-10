@@ -1,3 +1,4 @@
+from __future__ import annotations
 from discord import app_commands
 from discord.ext import commands
 import asyncio, typing, discord, re, math
@@ -70,7 +71,44 @@ class Moderation(commands.Cog):
         print(info)
         #user = await self.bot.fetch_user(int(user_id))
 
-    
+    # @commands.command()
+    # async def blep(self, ctx: commands.Context, user_id: int):
+    #     #user = self.bot.get_user(int(user_id))
+    #     #print(user, dir(user))
+    #     channel = ctx.channel
+    #     guild = self.bot.get_guild(515422159380807681) 
+    #     shikimori = guild.get_member(911199000248598559)
+    #     user = guild.get_member(user_id)
+
+    #     wh = await channel.create_webhook(name='Shikimori')
+    #     await wh.send(str(user.guild_avatar), username=str(shikimori.name), avatar_url=shikimori.avatar)
+
+    #     webhooks = await ctx.channel.webhooks()
+    #     for webhook in webhooks:
+    #         await webhook.delete()
+
+    # @commands.Cog.listener(name="on_message")
+    # async def on_message(self, message: discord.Message):
+    #     channel = message.channel
+        
+    #     guild = self.bot.get_guild(515422159380807681) 
+    #     shikimori = guild.get_member(911199000248598559)
+    #     #user = guild.get_member(441236769376305162)
+    #     me = guild.get_member(515844352971636736)
+
+    #     if message.author == shikimori:
+    #         #print(user, dir(user))
+    #         avatar = message.content
+
+            # wh = await channel.create_webhook(name='Shikimori')
+            # embed=discord.Embed(title="There is **nothing** that cannot be bleped.", description="Shikimori uga booga", color=0xfeb4fb)
+            # embed.set_image(url=user.guild_avatar)
+            # await wh.send(embed=embed, username=str(shikimori.name), avatar_url=shikimori.avatar)
+
+            # webhooks = await channel.webhooks()
+            # for webhook in webhooks:
+            #     await webhook.delete()
+
 
 
 async def setup(bot: commands.Bot):
